@@ -18,6 +18,7 @@ var html = `
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0, user-scalable=no"/>
 <title>${authConfig.siteName}</title>
+<link rel="shortcut icon" href="//cdn.jsdelivr.net/gh/jiujiangluck/goindex/themes/logo.png" >
 <script src="//cdn.jsdelivr.net/combine/gh/jquery/jquery@3.2/dist/jquery.min.js,gh/jiujiangluck/goindex/themes/${authConfig.theme}/app.js"></script>
 </head>
 <body>
@@ -32,48 +33,54 @@ async function handleRequest(request) {
   if(gd == undefined){
     gd = new googleDrive(authConfig);
   }
+
   if(request.method == 'POST'){
     return handlePostRequest(request);
   }
   else{
     return handleGetRequest(request);
   }
+ 
 }
+
+
+
 
 /*post处理api请求：以json形式返回文件或者文件夹信息*/
 async function handlePostRequest(request){
-  let path = new URL(request.url).pathname
-  let header = {status:200,headers:{'Access-Control-Allow-Origin':'*'}}
-  if(path.substr(-1) == '/'){
-    // check password
-    let password = await gd.getPwd(path);
-    console.log("dir password", password);
-    if(password != undefined && password != null && password != ""){
-      try{
-        var obj = await request.json();
-      }catch(e){
-        var obj = {};
-      }
-      console.log(password,obj);
-      if(password.replace("\n", "") != obj.password){
-        return new Response(`{"error": {"code": 401,"message": "password error."}}`,header);
-      }
+let path = new URL(request.url).pathname
+let header = {status:200,headers:{'Access-Control-Allow-Origin':'*'}}
+if(path.substr(-1) == '/'){
+  // check password
+  let password = await gd.password(path);
+  console.log("dir password", password);
+  if(password != undefined && password != null && password != ""){
+    try{
+      var obj = await request.json();
+    }catch(e){
+      var obj = {};
     }
-    //返回文件夹信息
-    let list = await gd.list(path);
-    return new Response(JSON.stringify(list),header);
-  }else{
-    //返回文件信息
-    let file = await gd.file(path);
-    return new Response(JSON.stringify(file),header);
+    console.log(password,obj);
+    if(password.replace("\n", "") != obj.password){
+      return new Response(`{"error": {"code": 401,"message": "password error."}}`,header);
+    }
   }
+  //返回文件夹信息
+  let list = await gd.list(path);
+  return new Response(JSON.stringify(list),header);
+}else{
+  //返回文件信息
+  let file = await gd.file(path);
+  return new Response(JSON.stringify(file),header);
+}
+
 }
 
 /*get处理页面请求或者文件请求*/
 async function handleGetRequest(request){
   let path = new URL(request.url).pathname;
-  //处理文件
-  if(path.substr(-1) != '/'){ 
+
+  if(path.substr(-1) != '/'){ //处理文件
     if (path.split('/').pop().toLowerCase() == ".pwd") { //不允许查看
       return new Response("", { status: 404 });
     }
@@ -88,15 +95,17 @@ async function handleGetRequest(request){
       return new Response("", { status: 404 }); // if path: /notexist/notexist
     }
   }
+
   //处理页面
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 
+
 class googleDrive {
   constructor(authConfig) {
-      this.authConfig = authConfig;//gd 配置
-      this.paths = []; // (path, path_id)
+      this.authConfig = authConfig;
+      this.paths = [];
       this.files = [];
       this.passwords = [];
       this.paths["/"] = authConfig.root;
@@ -105,7 +114,64 @@ class googleDrive {
       }
   }
 
-  async getPwd(path){
+  async down(id, range=''){
+    let url = `https://www.googleapis.com/drive/v3/files/${id}?alt=media`;
+    let requestOption = await this.requestOption();
+    requestOption.headers['Range'] = range;
+    return await fetch(url, requestOption);
+  }
+
+  async file(path){
+    if(typeof this.files[path] == 'undefined'){
+      this.files[path]  = await this._file(path);
+    }
+    return this.files[path] ;
+  }
+
+  async _file(path){
+    let arr = path.split('/');
+    let name = arr.pop();
+    name = decodeURIComponent(name).replace(/\'/g, "\\'");
+    let dir = arr.join('/')+'/';
+    console.log(name, dir);
+    let parent = await this.findPathId(dir);
+    console.log(parent);
+    let url = 'https://www.googleapis.com/drive/v3/files';
+    let params = {'includeItemsFromAllDrives':true,'supportsAllDrives':true};
+    params.q = `'${parent}' in parents and name = '${name}' andtrashed = false`;
+    params.fields = "files(id, name, mimeType, size ,createdTime, modifiedTime, iconLink, thumbnailLink, shortcutDetails)";
+    url += '?'+this.enQuery(params);
+    let requestOption = await this.requestOption();
+    let response = await fetch(url, requestOption);
+    let obj = await response.json();
+    if (obj.files && obj.files[0] && obj.files[0].mimeType == 'application/vnd.google-apps.shortcut'){
+      obj.files[0].id = obj.files[0].shortcutDetails.targetId;
+      obj.files[0].mimeType = obj.files[0].shortcutDetails.targetMimeType;
+    }
+    console.log(obj);
+    return obj.files[0];
+  }
+
+  // 通过reqeust cache 来缓存
+  async list(path){
+    if (gd.cache == undefined) {
+      gd.cache = {};
+    }
+
+    if (gd.cache[path]) {
+      return gd.cache[path];
+    }
+
+    let id = await this.findPathId(path);
+    var obj = await this._ls(id);
+    if (obj.files && obj.files.length > 1000) {
+          gd.cache[path] = obj;
+    }
+
+    return obj
+  }
+
+  async password(path){
     if(this.passwords[path] !== undefined){
       return this.passwords[path];
     }
@@ -125,64 +191,9 @@ class googleDrive {
     return this.passwords[path];
   }
 
-  async down(id, range=''){
-    let url = `https://www.googleapis.com/drive/v3/files/${id}?alt=media`;
-    let requestOption = await this.requestOption();
-    requestOption.headers['Range'] = range;
-    return await fetch(url, requestOption);
-  }
-
-  // 通过reqeust cache 来缓存
-  async list(path){
-    if (gd.cache == undefined) {
-      gd.cache = {};
-    }
-    if (gd.cache[path]) {
-      return gd.cache[path];
-    }
-    let id = await this.getPathId(path);
-    var obj = await this._ls(id);
-    if (obj.files && obj.files.length > 1000) {
-          gd.cache[path] = obj;
-    }
-    return obj
-  }
-
-  async file(path){
-    if(typeof this.files[path] == 'undefined'){
-      this.files[path]  = await this._file(path);
-    }
-    return this.files[path] ;
-  }
-
-  //fetch current flie info  
-  async _file(path){ 
-    let arr = path.split('/');
-    let name = arr.pop();
-    name = decodeURIComponent(name).replace(/\'/g, "\\'");
-    let dir = arr.join('/')+'/';
-    console.log(name, dir);
-    let parent = await this.getPathId(dir);
-    console.log(parent);
-    let url = 'https://www.googleapis.com/drive/v3/files';
-    let params = {'includeItemsFromAllDrives':true,'supportsAllDrives':true};
-    params.q = `'${parent}' in parents and name = '${name}' and trashed = false`;
-    params.fields = "files(id, name, mimeType, size ,createdTime, modifiedTime, iconLink, thumbnailLink, shortcutDetails)";
-    url += '?'+this.enQuery(params);
-    let requestOption = await this.requestOption();
-    let response = await fetch(url, requestOption);
-    let obj = await response.json();
-    if (obj.files && obj.files[0] && obj.files[0].mimeType == 'application/vnd.google-apps.shortcut'){
-      obj.files[0].id = obj.files[0].shortcutDetails.targetId;
-      obj.files[0].mimeType = obj.files[0].shortcutDetails.targetMimeType;
-    }
-    console.log(obj);
-    return obj.files[0];
-  }
-
-  // list all dirs or files in current dir
   async _ls(parent){
     console.log("_ls",parent);
+
     if(parent==undefined){
       return null;
     }
@@ -194,6 +205,7 @@ class googleDrive {
     params.orderBy= 'folder,name,modifiedTime desc';
     params.fields = "nextPageToken, files(id, name, mimeType, size , modifiedTime, shortcutDetails)";
     params.pageSize = 1000;
+
     do {
       if (pageToken) {
           params.pageToken = pageToken;
@@ -212,21 +224,25 @@ class googleDrive {
       files.push(...obj.files);
       pageToken = obj.nextPageToken;
     } while (pageToken);
+
     obj.files = files;
+    console.log(obj)
     return obj;
   }
 
-  async getPathId(path){
+  async findPathId(path){
     let c_path = '/';
     let c_id = this.paths[c_path];
-    //获取当前路径的所有组合路径id
+
     let arr = path.trim('/').split('/');
     for(let name of arr){
       c_path += name+'/';
+
       if(typeof this.paths[c_path] == 'undefined'){
         let id = await this._findDirId(c_id, name);
         this.paths[c_path] = id;
       }
+
       c_id = this.paths[c_path];
       if(c_id == undefined || c_id == null){
         break;
@@ -238,7 +254,9 @@ class googleDrive {
 
   async _findDirId(parent, name){
     name = decodeURIComponent(name).replace(/\'/g, "\\'");
+    
     console.log("_findDirId",parent,name);
+
     if(parent==undefined){
       return null;
     }

@@ -42,7 +42,9 @@ function title(path){
 // 渲染导航栏
 function nav(path){
     var html = "";
-    html += `<a href="/" class="mdui-typo-headline folder">${document.siteName}</a>`;
+	html += `<a href="/" class="mdui-typo-headline folder">
+	${document.siteName}
+	<img src="//cdn.jsdelivr.net/gh/jiujiangluck/goindex/themes/logo.png" alt="GoPan"></a>`;
     var arr = path.trim('/').split('/');
     var p = '/';
     if(arr.length > 0){
