@@ -19,7 +19,7 @@ var html = `
 <meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0, user-scalable=no"/>
 <title>${authConfig.siteName}</title>
 <link rel="shortcut icon" href="//cdn.jsdelivr.net/gh/jiujiangluck/goindex/themes/logo.png" >
-<script src="//cdn.jsdelivr.net/combine/gh/jquery/jquery@3.2/dist/jquery.min.js,gh/jiujiangluck/goindex/themes/${authConfig.theme}/app.js"></script>
+<script src="//cdn.jsdelivr.net/combine/gh/jquery/jquery@3.2/dist/jquery.min.js,gh/jiujiangluck/gdpan/themes/${authConfig.theme}/app.js"></script>
 </head>
 <body>
 </body>
@@ -42,9 +42,6 @@ async function handleRequest(request) {
   }
  
 }
-
-
-
 
 /*post处理api请求：以json形式返回文件或者文件夹信息*/
 async function handlePostRequest(request){
@@ -78,9 +75,11 @@ if(path.substr(-1) == '/'){
 
 /*get处理页面请求或者文件请求*/
 async function handleGetRequest(request){
-  let path = new URL(request.url).pathname;
+  let url = new URL(request.url)
+  let path = url.pathname
+  let action = url.searchParams.get('a')
 
-  if(path.substr(-1) != '/'){ //处理文件
+  if(path.substr(-1) != '/' & action != 'view'){ //处理文件
     if (path.split('/').pop().toLowerCase() == ".pwd") { //不允许查看
       return new Response("", { status: 404 });
     }
