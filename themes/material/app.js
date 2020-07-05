@@ -1,5 +1,5 @@
 //引入html
-document.write('<script src="//cdn.jsdelivr.net/gh/jiujiangluck/gdpan/themes/material/html.js"></script>')
+document.write('<script src="//cdn.jsdelivr.net/gh/jiujiangluck/gd/themes/material/html.js"></script>')
 // 在head 中加载必要静态
 document.write('<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/mdui@0.4.3/dist/css/mdui.min.css">');
 // markdown支持
