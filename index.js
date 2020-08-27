@@ -5,7 +5,7 @@ var authConfig = {
   "theme" : "material", // material or classic 
   "client_id": "202264815644.apps.googleusercontent.com",
   "client_secret": "X4Z3ca8xfWDb1Voo-F9a7ZxJ",
-  "refresh_token": "1//0fp2olSahUne3CgYIARAAGA8SNwF-L9Ir7xGVSrHKhzdUZu3VJX6LvpKZwm5Fr7YTeqOyfTlSeJrz_uzS5cpvC0CBzV2Cb36hgio", // 授权 token
+  "refresh_token": "*****************", // 授权 token
   "root": "0ACFNe3pXRF9qUk9PVA" // 根目录ID
 }
 
